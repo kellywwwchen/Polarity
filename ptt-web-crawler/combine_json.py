@@ -27,7 +27,7 @@ def process_json(json_file):
 with open(all_ptt_json[0], 'r') as f:
     data = json.load(f)
 
-# 处理剩余的页面
+# 處理剩餘頁面
 with ThreadPoolExecutor() as executor:
     future_to_file = {executor.submit(process_json, json_file): json_file for json_file in all_ptt_json[1:]}
 
@@ -38,7 +38,7 @@ with ThreadPoolExecutor() as executor:
             data['articles'].extend(tmp)
             # print(f'{json_file} Done.')
         except Exception as e:
-            pass  # 错误已经在 process_json 函数中处理过了
+            pass  
 # error        
 with ThreadPoolExecutor() as executor:
     future_to_file = {executor.submit(process_json, json_file): json_file for json_file in error_page}
@@ -50,10 +50,10 @@ with ThreadPoolExecutor() as executor:
             data['articles'].extend(tmp)
             # print(f'{json_file} Done.')
         except Exception as e:
-            pass  # 错误已经在 process_json 函数中处理过了    
+            pass    
 
 with open(os.path.join(PATH, 'all_ptt_2020_2022_test.pickle'), 'wb') as f:
     pickle.dump(data, f)
 
 with open(os.path.join(PATH, 'error_ptt_2020_2022.pickle'), 'wb') as f:
-    pickle.dump(data, f)    
+    pickle.dump(error_page, f)    
