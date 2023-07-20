@@ -11,10 +11,8 @@ from dateutil import parser
 
 
 PATH = '/home/kellychen/Polarity/ptt-web-crawler/PttWebCrawler'
-PICKLE_FILE = 'all_ptt_2020_2022.pickle'
+PICKLE_FILE = 'all_ptt_2020_2022_test.pickle'
 DB_FILE = 'gossiping_2020_2022.db'
-# PATH = '/content/drive/MyDrive/懷萱_宗樺_polarity/'
-# PATH = '/home/kellychen/Polarity/'
 
 print(f'===== Read the pickle: {PICKLE_FILE} =====')
 with open(os.path.join(PATH, PICKLE_FILE), 'rb') as f:
@@ -41,7 +39,7 @@ def transform_article_datetime(r):
         post_datetime = ' '.join([post_year, post_month, post_day, post_time])  # 'yyyy mm dd HH:MM'
         return parser.parse(post_datetime)  # 自動日期時間格式: 'yyyy-mm-dd HH:MM:00' 
     else:
-        return 0
+        return np.nan
     
 # 更改留言日期&IP格式 e.g. 42.75.154.235 01/07 12:40 -> IP:42.75.154.235 / datetime: 2022-01-07 12:40:00
 def transform_push_ip_datetime(r, push_year):
@@ -54,14 +52,14 @@ def transform_push_ip_datetime(r, push_year):
             push_time = list(filter(time_regex.search, r.split()))[0]  # HH:MM
             push_datetime = parser.parse(' '.join([push_date, push_time]))  # 自動日期時間格式: 'yyyy-mm-dd HH:MM:00'
         else:
-            push_datetime = '0'
+            push_datetime = np.nan
     except:
-        push_datetime = '0'  
+        push_datetime = np.nan  
          
     if any(ip_regex.search(x) for x in r.split()):     # 是否存在 ip 
         push_ip = list(filter(ip_regex.search, r.split()))[0]
     else:
-        push_ip = '0'
+        push_ip = np.nan
     
     return push_datetime, push_ip    
     
@@ -80,6 +78,11 @@ def calculate_politician(r):
 
 print(f'===== Processing the date format =====')
 all_ptt_df['date'] = all_ptt_df['date'].apply(transform_article_datetime)
+# 保留 2020~2022
+m1 = (all_ptt_df['date'] < '2020-01-01')
+m2 = (all_ptt_df['date'] >= '2023-01-01')
+all_ptt_df = all_ptt_df[~m1&~m2].sort_values(['date'])
+all_ptt_df.drop_duplicates(subset=['article_id'], inplace=True, ignore_index=True)
 print(f'===== Calculating the politician =====')
 all_ptt_df['politician_count'], all_ptt_df['main_politician'] = zip(*all_ptt_df.apply(calculate_politician, axis=1))
 
@@ -115,8 +118,8 @@ cursor.execute('''
         push_userid VARCHAR, 
         push_time DATETIME, 
         push_user_ip VARCHAR,
-        article_id VARCHAR,
-        FOREIGN KEY (article_id) REFERENCES article(article_id)
+        a_id VARCHAR,
+        FOREIGN KEY (a_id) REFERENCES article(article_id)
     )
 ''')
 
@@ -145,14 +148,14 @@ for i, article_id in tqdm(enumerate(all_ptt_df['article_id'].unique())):
             tmp2.to_sql('article', conn, if_exists = 'append', index = False)
             # === 留言的年份 ===
             # 留言沒有年份，所以僅能依照發布文章的年份對照。如果文章沒有日期，則統一先給予年份：1900
-            if tmp1.loc[i]['date'] == 0:
+            if pd.isna(tmp1.loc[i]['date']):
                 push_year = '1900'
             else:
                 push_year = str(tmp1.loc[i]['date'].year)
             # 展開每則留言 cols = ['push_content', 'push_tag', 'push_userid', 'push_user_ip']
             tmp3 = pd.DataFrame.from_records(all_ptt_df.loc[i]['messages'])
             tmp3['push_time'], tmp3['push_user_ip'] = zip(*tmp3['push_ipdatetime'].apply(lambda x:transform_push_ip_datetime(x, push_year)))
-            tmp3['article_id'] = article_id
+            tmp3['a_id'] = article_id
             tmp3.drop(['push_ipdatetime'], axis=1, inplace=True)
             tmp3.to_sql('comments', conn, if_exists = 'append', index = False)
             del tmp1, tmp2, tmp3
